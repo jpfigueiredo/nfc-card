@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gerenciador NFC - Taggy-like (Firebase)</title>
+
+  <!-- Tailwind CDN (rápido para protótipo) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* Pequenos ajustes visuais */
+    .card-preview { max-width: 420px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+  <div class="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
+    <!-- Editor -->
+    <div class="md:col-span-2 bg-white p-6 rounded-xl shadow">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-xl font-semibold">Editor de Cartões NFC</h1>
+        <div class="text-sm text-gray-500">Salvamento automático → Firestore</div>
+      </div>
+
+      <div class="mb-4 flex gap-2 items-center">
+        <input id="cardId" placeholder="ID do cartão (ex: cartao1)" class="border p-2 rounded flex-1" />
+        <button id="btnNew" class="px-4 py-2 bg-indigo-600 text-white rounded">Criar / Abrir</button>
+        <button id="btnList" class="px-3 py-2 border rounded">Listar</button>
+      </div>
+
+      <div id="editor" class="space-y-3 opacity-60 pointer-events-none">
+        <input id="name" placeholder="Nome" class="w-full border p-2 rounded" />
+        <input id="title" placeholder="Título / Cargo" class="w-full border p-2 rounded" />
+        <input id="company" placeholder="Empresa" class="w-full border p-2 rounded" />
+        <input id="phone" placeholder="Telefone" class="w-full border p-2 rounded" />
+        <input id="email" placeholder="Email" class="w-full border p-2 rounded" />
+        <input id="website" placeholder="Website (https://...)" class="w-full border p-2 rounded" />
+        <textarea id="bio" placeholder="Descrição curta" class="w-full border p-2 rounded h-24"></textarea>
+
+        <div class="flex gap-2">
+          <input id="color" type="color" value="#6b21a8" class="w-16 h-10 rounded border p-1" />
+          <input id="avatar" type="file" accept="image/*" class="border p-2 rounded flex-1" />
+        </div>
+
+        <div class="flex gap-2">
+          <button id="btnExport" class="px-4 py-2 border rounded">Exportar JSON</button>
+          <button id="btnCopyUrl" class="px-4 py-2 border rounded">Copiar link público</button>
+          <button id="btnDelete" class="px-4 py-2 text-red-600 border rounded">Excluir cartão</button>
+        </div>
+
+        <div id="status" class="text-sm text-gray-500"></div>
+      </div>
+    </div>
+
+    <!-- Preview / List -->
+    <div class="bg-white p-6 rounded-xl shadow">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold">Preview</h2>
+        <div class="text-xs text-gray-400">Como aparecerá no celular</div>
+      </div>
+
+      <div id="previewArea" class="card-preview mx-auto rounded-xl overflow-hidden border" style="border-width:4px; border-color:#6b21a8;">
+        <div class="p-4 bg-white">
+          <div class="flex gap-3">
+            <div id="imgHolder" class="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center">Sem foto</div>
+            <div>
+              <div id="previewName" class="font-semibold text-lg">Seu nome</div>
+              <div id="previewTitle" class="text-sm text-gray-600">Cargo — Empresa</div>
+            </div>
+          </div>
+
+          <div class="mt-3 text-sm text-gray-700" id="previewContacts">
+            <div><strong>Tel:</strong> -</div>
+            <div><strong>Email:</strong> -</div>
+            <div><strong>Site:</strong> -</div>
+          </div>
+
+          <div class="mt-3 text-sm text-gray-600" id="previewBio">Descrição...</div>
+
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <a id="openPublic" class="text-center px-3 py-2 border rounded text-xs" target="_blank">Abrir público</a>
+            <button id="simulateNFC" class="px-3 py-2 border rounded text-xs">Simular NFC</button>
+          </div>
+        </div>
+
+        <div class="p-3 bg-gray-50 border-t text-xs text-center">QR / NFC → link público: <span id="publicUrl" class="break-all"></span></div>
+      </div>
+
+      <div id="listArea" class="mt-4"></div>
+    </div>
+  </div>
+
+  <!-- FIREBASE v9 modular (CDN modules) -->
+  <script type="module">
+    // ------- CONFIG (já preenchido com suas credenciais) -------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+    import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCAypo0N8sNBm80aRdxVOtmuivfDTrt294",
+      authDomain: "fivestar-da5ec.firebaseapp.com",
+      projectId: "fivestar-da5ec",
+      storageBucket: "fivestar-da5ec.appspot.com",
+      messagingSenderId: "431494326996",
+      appId: "1:431494326996:web:64e1283fef158b1acc6941",
+      measurementId: "G-CEHTL22LBW"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    // ------- UI elements -------
+    const cardIdInput = document.getElementById('cardId');
+    const btnNew = document.getElementById('btnNew');
+    const btnList = document.getElementById('btnList');
+    const editor = document.getElementById('editor');
+    const status = document.getElementById('status');
+
+    const fields = ['name','title','company','phone','email','website','bio','color'];
+    const inputs = {};
+    fields.forEach(f => inputs[f] = document.getElementById(f));
+    const avatarInput = document.getElementById('avatar');
+    const imgHolder = document.getElementById('imgHolder');
+
+    const previewName = document.getElementById('previewName');
+    const previewTitle = document.getElementById('previewTitle');
+    const previewContacts = document.getElementById('previewContacts');
+    const previewBio = document.getElementById('previewBio');
+    const publicUrlSpan = document.getElementById('publicUrl');
+    const openPublicBtn = document.getElementById('openPublic');
+    const simulateNFC = document.getElementById('simulateNFC');
+    const btnExport = document.getElementById('btnExport');
+    const btnCopyUrl = document.getElementById('btnCopyUrl');
+    const btnDelete = document.getElementById('btnDelete');
+    const listArea = document.getElementById('listArea');
+
+    let currentId = null;
+    let saveTimer = null;
+
+    // debounce save
+    function scheduleSave() {
+      status.innerText = 'Alteração pendente...';
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveCurrent(), 800);
+    }
+
+    // enable editor
+    function enableEditor(enable=true) {
+      editor.classList.toggle('opacity-60', !enable);
+      editor.classList.toggle('pointer-events-none', !enable);
+    }
+
+    // load card data from Firestore
+    async function loadCard(id) {
+      if (!id) return alert('Informe o ID do cartão.');
+      currentId = id;
+      cardIdInput.value = id;
+      enableEditor(false);
+      status.innerText = 'Carregando...';
+      try {
+        // listen realtime
+        const docRef = doc(db, 'cards', id);
+        // unsub if exists
+        if (window.unsubscribeDoc) window.unsubscribeDoc();
+        window.unsubscribeDoc = onSnapshot(docRef, (snap) => {
+          if (!snap.exists()) {
+            // set defaults
+            const base = {
+              name:'Seu nome',
+              title:'',
+              company:'',
+              phone:'',
+              email:'',
+              website:'',
+              bio:'',
+              color:'#6b21a8',
+              avatarUrl:'',
+              updated: new Date().toISOString()
+            };
+            // write initial doc for first open
+            setDoc(docRef, base, { merge: true }).then(() => console.log('Doc inicial criado'));
+            fillEditor(base);
+            enableEditor(true);
+            status.innerText = 'Criado novo cartão (ID: '+id+')';
+            renderPublicUrl();
+            return;
+          }
+          const data = snap.data();
+          fillEditor(data);
+          enableEditor(true);
+          status.innerText = 'Dados carregados. Última atualização: ' + (data.updated || '-');
+          renderPublicUrl();
+        }, (err) => {
+          console.error(err);
+          status.innerText = 'Erro ao ouvir o cartão: ' + err.message;
+        });
+      } catch (err) {
+        status.innerText = 'Erro: ' + err.message;
+      }
+    }
+
+    function fillEditor(data) {
+      fields.forEach(f => {
+        const el = inputs[f];
+        if (el) el.value = data[f] || '';
+      });
+      if (data.color) document.getElementById('color').value = data.color;
+      if (data.avatarUrl) {
+        imgHolder.innerHTML = `<img src="${data.avatarUrl}" class="w-full h-full object-cover">`;
+      } else {
+        imgHolder.textContent = 'Sem foto';
+      }
+      // update preview
+      updatePreview();
+    }
+
+    function getEditorPayload() {
+      const payload = {};
+      fields.forEach(f => payload[f] = inputs[f].value || '');
+      payload.color = document.getElementById('color').value || '#6b21a8';
+      payload.updated = new Date().toISOString();
+      return payload;
+    }
+
+    // save current card to Firestore
+    async function saveCurrent() {
+      if (!currentId) return;
+      const payload = getEditorPayload();
+      // if a file selected -> upload to storage as base64
+      const file = avatarInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64 = reader.result;
+            const storageRef = sRef(storage, `avatars/${currentId}.jpg`);
+            await uploadString(storageRef, base64, 'data_url');
+            const url = await getDownloadURL(storageRef);
+            payload.avatarUrl = url;
+            await setDoc(doc(db, 'cards', currentId), payload, { merge: true });
+            // clear file input (so upload doesn't repeat every save)
+            avatarInput.value = '';
+            status.innerText = 'Salvo (com imagem).';
+          } catch (err) {
+            console.error(err);
+            status.innerText = 'Erro ao salvar imagem: ' + err.message;
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        try {
+          await setDoc(doc(db, 'cards', currentId), payload, { merge: true });
+          status.innerText = 'Salvo.';
+        } catch (err) {
+          console.error(err);
+          status.innerText = 'Erro ao salvar: ' + err.message;
+        }
+      }
+    }
+
+    // update preview UI from editor values
+    function updatePreview() {
+      const p = getEditorPayload();
+      previewName.textContent = p.name || 'Seu nome';
+      previewTitle.textContent = ((p.title||'') + (p.company?(' — '+p.company):'')).trim();
+      previewContacts.innerHTML = `<div><strong>Tel:</strong> ${p.phone||'-'}</div>
+                                   <div><strong>Email:</strong> ${p.email||'-'}</div>
+                                   <div><strong>Site:</strong> ${p.website||'-'}</div>`;
+      previewBio.textContent = p.bio || 'Descrição...';
+      document.querySelector('.card-preview').style.borderColor = p.color || '#6b21a8';
+    }
+
+    // render public url for NFC / qr
+    function renderPublicUrl() {
+      if (!currentId) return;
+      const u = `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}`;
+      publicUrlSpan.textContent = u;
+      openPublicBtn.href = u;
+    }
+
+    // list all cards (basic)
+    async function listCards() {
+      listArea.innerHTML = 'Carregando...';
+      try {
+        const snap = await getDocs(collection(db, 'cards'));
+        if (snap.empty) {
+          listArea.innerHTML = '<div class="text-sm text-gray-500">Nenhum cartão encontrado.</div>';
+          return;
+        }
+        const rows = [];
+        snap.forEach(d => {
+          const data = d.data();
+          rows.push(`<div class="p-2 border-b flex justify-between items-center">
+            <div>
+              <div class="font-medium text-sm">${data.name || d.id}</div>
+              <div class="text-xs text-gray-500">${d.id} • ${data.updated?new Date(data.updated).toLocaleString():'-'}</div>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="window.loadFromList('${d.id}')" class="px-2 py-1 text-xs border rounded">Abrir</button>
+              <button onclick="window.deleteCard('${d.id}')" class="px-2 py-1 text-xs border rounded text-red-600">Apagar</button>
+            </div>
+          </div>`);
+        });
+        listArea.innerHTML = rows.join('');
+      } catch (err) {
+        listArea.innerHTML = 'Erro ao listar: '+err.message;
+      }
+    }
+
+    // delete card
+    async function deleteCard(id) {
+      if (!confirm('Excluir cartão '+id+' ?')) return;
+      try {
+        await deleteDoc(doc(db,'cards',id));
+        if (currentId === id) {
+          currentId = null;
+          enableEditor(false);
+        }
+        status.innerText = 'Cartão excluído';
+        listCards();
+      } catch (err) {
+        status.innerText = 'Erro ao excluir: ' + err.message;
+      }
+    }
+
+    // export JSON
+    function exportJSON() {
+      if (!currentId) return alert('Abra um cartão primeiro.');
+      const payload = getEditorPayload();
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = currentId + ".json";
+      a.click();
+    }
+
+    // copy public link
+    function copyPublicLink() {
+      if (!currentId) return alert('Abra um cartão primeiro.');
+      const url = `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}`;
+      navigator.clipboard.writeText(url).then(() => alert('Link copiado!'));
+    }
+
+    // simulate NFC (abre link público)
+    function simulate() {
+      if (!currentId) return alert('Abra um cartão primeiro.');
+      const url = `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}`;
+      window.open(url,'_blank');
+    }
+
+    // Hook window functions used inside generated list markup
+    window.loadFromList = (id) => loadCard(id);
+    window.deleteCard = (id) => deleteCard(id);
+
+    // ------- events -------
+    btnNew.onclick = () => {
+      const id = cardIdInput.value.trim();
+      if (!id) return alert('Digite um ID para o cartão (ex: cartao1)');
+      loadCard(id);
+    };
+
+    btnList.onclick = () => listCards();
+
+    // update preview on input changes + schedule save
+    [...document.querySelectorAll('#editor input, #editor textarea, #editor select')].forEach(el => {
+      el.addEventListener('input', () => {
+        updatePreview();
+        if (currentId) scheduleSave();
+      });
+    });
+
+    avatarInput.addEventListener('change', () => {
+      // show preview immediately
+      const f = avatarInput.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        imgHolder.innerHTML = `<img src="${rd.result}" class="w-full h-full object-cover">`;
+        scheduleSave();
+      };
+      rd.readAsDataURL(f);
+    });
+
+    btnExport.onclick = () => exportJSON();
+    btnCopyUrl.onclick = () => copyPublicLink();
+    simulateNFC.onclick = () => simulate();
+    btnDelete.onclick = () => {
+      if (!currentId) return alert('Abra um cartão primeiro.');
+      deleteCard(currentId);
+    };
+
+    // If URL contains ?id=..., load public view or the editor depending on mode.
+    (function handleUrlOnLoad(){
+      const params = new URLSearchParams(location.search);
+      const id = params.get('id');
+      if (!id) {
+        enableEditor(false);
+        return;
+      }
+      // If the path contains #public, render only public view (for NFC usage)
+      const isPublic = location.hash === '#public' || params.get('public') === '1';
+      if (isPublic) {
+        // fetch once and render a clean public view (no editor UI)
+        (async () => {
+          const snap = await getDoc(doc(db,'cards', id));
+          if (!snap.exists()) {
+            document.body.innerHTML = '<div class="p-6">Cartão não encontrado.</div>';
+            return;
+          }
+          const d = snap.data();
+          // minimal public HTML
+          document.body.innerHTML = `
+            <div class="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+              <div class="w-full max-w-sm bg-white p-6 rounded-xl shadow text-center">
+                <div style="border:6px solid ${d.color||'#6b21a8'}" class="rounded-xl overflow-hidden">
+                  <div class="p-4">
+                    <div class="w-24 h-24 rounded-full mx-auto overflow-hidden bg-gray-100">${d.avatarUrl?'<img src="'+d.avatarUrl+'" class="w-full h-full object-cover">':''}</div>
+                    <h2 class="mt-4 text-xl font-semibold">${d.name||''}</h2>
+                    <div class="text-sm text-gray-600">${d.title||''} ${d.company?(' — '+d.company):''}</div>
+                    <div class="mt-4 text-sm text-gray-700">
+                      <div><strong>Tel:</strong> ${d.phone||'-'}</div>
+                      <div><strong>Email:</strong> ${d.email||'-'}</div>
+                      <div><strong>Site:</strong> ${d.website?'<a href="'+d.website+'" target="_blank">'+d.website+'</a>':'-'}</div>
+                    </div>
+                    <p class="mt-4 text-sm text-gray-600">${d.bio||''}</p>
+                    <div class="mt-4">
+                      <a href="tel:${d.phone||''}" class="px-4 py-2 border rounded">Ligar</a>
+                      <a href="mailto:${d.email||''}" class="px-4 py-2 border rounded ml-2">Email</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        })();
+        return;
+      }
+      // else load editor for this id
+      loadCard(id);
+    })();
+
+  </script>
+</body>
+</html>
