@@ -1,0 +1,9 @@
+{
+  "cartoes": [
+    {
+      "id": "cartao1",
+      "nome": "Modelo Inicial",
+      "arquivo": "cartao1.json"
+    }
+  ]
+}
