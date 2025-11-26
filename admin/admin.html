@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Admin - Cartões Cadastrados</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="admin-container">
+    <h1>Painel Administrativo</h1>
+    <p class="subtitle">Gerencie todos os cartões cadastrados</p>
+
+    <div class="table-container">
+      <table id="cartoesTabela">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Número</th>
+            <th>Validade</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Dados serão inseridos dinamicamente pelo JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <button class="logout-btn" onclick="logout()">Sair</button>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
+
