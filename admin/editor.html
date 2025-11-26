@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Editor de Cartão</title>
+<style>
+body { font-family: Arial; padding:20px; }
+textarea, input { width:100%; padding:10px; margin-top:10px; }
+button { padding:10px; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<h2>Editor de Cartão</h2>
+
+<div id="status"></div>
+
+<textarea id="editor" rows="40"></textarea>
+
+<button onclick="salvar()">Salvar Alterações</button>
+
+<script>
+if (localStorage.getItem("auth") !== "ok") {
+  window.location.href = "index.html";
+}
+
+const params = new URLSearchParams(location.search);
+const id = params.get("id");
+let arquivo = "";
+
+async function carregar() {
+  const r = await fetch("/data/cartoes.json");
+  const d = await r.json();
+
+  const item = d.cartoes.find(c => c.id === id);
+  arquivo = item.arquivo;
+
+  const cartao = await fetch("/data/" + arquivo).then(x => x.json());
+
+  document.getElementById("editor").value =
+    JSON.stringify(cartao, null, 2);
+}
+
+async function salvar() {
+  const json = document.getElementById("editor").value;
+
+  fetch("/api/salvar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tipo: "salvarCartao",
+      arquivo,
+      conteudo: json
+    })
+  }).then(() => {
+    alert("Salvo com sucesso!");
+  });
+}
+
+carregar();
+</script>
+
+</body>
+</html>
