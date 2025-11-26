@@ -1,140 +1,98 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Cartão Virtual</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; font-family:Arial; }
-  body {
-    background:#f2f2f2;
-    display:flex;
-    justify-content:center;
-    padding:20px;
-  }
-  .card-container {
-    width:100%;
-    max-width:480px;
-    background:white;
-    border-radius:20px;
-    overflow:hidden;
-    box-shadow:0 4px 20px rgba(0,0,0,0.15);
-    position:relative;
-  }
-  .bg {
-    width:100%;
-    height:260px;
-    background-size:cover;
-    background-position:center;
-    opacity:var(--bg-opacity, 1);
-    position:relative;
-  }
-  .logo {
-    width:130px;
-    height:130px;
-    border-radius:50%;
-    border:5px solid white;
-    position:absolute;
-    left:50%;
-    bottom:-65px;
-    transform:translateX(-50%);
-    background-size:cover;
-    background-position:center;
-  }
-  .content {
-    padding:90px 20px 30px;
-  }
-  .botao {
-    width:100%;
-    padding:14px;
-    border-radius:14px;
-    background:#000;
-    color:white;
-    text-align:center;
-    margin-bottom:12px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:10px;
-    cursor:pointer;
-  }
-  .servico {
-    background:#fafafa;
-    border-radius:16px;
-    padding:16px;
-    margin-top:15px;
-    box-shadow:0 0 8px rgba(0,0,0,0.05);
-  }
-  .servico h3 { font-size:18px; margin-bottom:6px; }
-  .servico p { color:#444; font-size:14px; margin-bottom:10px; }
-  .carousel {
-    display:flex;
-    overflow-x:auto;
-    gap:10px;
-  }
-  .carousel img {
-    width:180px;
-    height:120px;
-    border-radius:10px;
-    object-fit:cover;
-  }
-  .valor {
-    margin-top:8px;
-    font-weight:bold;
-    font-size:16px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartão NFC</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial;
+      background-size: cover;
+      background-position: center;
+    }
+    .overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4);
+    }
+    .container {
+      width: 100%;
+      max-width: 420px;
+      margin: auto;
+      padding: 20px;
+      color: white;
+    }
+    .logo {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background-size: cover;
+      background-position: center;
+      margin: 20px auto;
+    }
+    .btn {
+      background: rgba(255,255,255,0.2);
+      padding: 15px;
+      border-radius: 12px;
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+    .btn img { width: 28px; margin-right: 10px; }
+    .servico {
+      background: rgba(255,255,255,0.15);
+      padding: 15px;
+      border-radius: 10px;
+      margin: 15px 0;
+    }
+    .carrossel img {
+      width: 100%; border-radius: 10px; margin-top: 10px;
+    }
+  </style>
 </head>
+
 <body>
-
-<div class="card-container" id="cartao">
-  <div class="bg" id="bg"></div>
-  <div class="logo" id="logo"></div>
-
-  <div class="content" id="conteudo">
-
-    <div id="botoes"></div>
-
-    <h2 style="margin-top:25px;">Serviços</h2>
-    <div id="servicos"></div>
-
-  </div>
-</div>
+  <div class="overlay"></div>
+  <div class="container" id="conteudo"></div>
 
 <script>
-  async function carregar() {
-    const dados = await fetch("data/cartao1.json").then(r => r.json());
+async function carregar() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get("id") || "cartao1";
 
-    document.documentElement.style.setProperty("--bg-opacity", dados.backgroundOpacity);
-    document.getElementById("bg").style.backgroundImage = `url(${dados.backgroundImage})`;
-    document.getElementById("logo").style.backgroundImage = `url(${dados.logo})`;
+  const json = await fetch(`/data/${id}.json`).then(r => r.json());
 
-    const boxBotoes = document.getElementById("botoes");
-    dados.botoes.forEach(b => {
-      boxBotoes.innerHTML += `
-        <div class='botao' onclick="location.href='${b.link}'">
-          <img src='${b.icone}' style='width:22px;height:22px'>
-          ${b.texto}
-        </div>`;
-    });
+  document.body.style.backgroundImage = `url('${json.backgroundImage}')`;
+  document.querySelector('.overlay').style.background = `rgba(0,0,0,${1-json.backgroundOpacity})`;
 
-    const boxServ = document.getElementById("servicos");
-    dados.servicos.forEach(s => {
-      let imgs = "";
-      s.imagens.forEach(i => { imgs += `<img src='${i}'>`; });
+  let html = `<div class='logo' style="background-image:url('${json.logo}')"></div>`;
 
-      boxServ.innerHTML += `
-        <div class='servico'>
-          <h3>${s.titulo}</h3>
-          <p>${s.descricao}</p>
-          <div class='carousel'>${imgs}</div>
-          <div class='valor'>R$ ${s.valor}</div>
-        </div>`;
-    });
-  }
+  json.botoes.forEach(b => {
+    html += `
+      <div class='btn' onclick="location.href='${b.link}'">
+        <img src="${b.icone}"> ${b.texto}
+      </div>`;
+  });
 
-  carregar();
+  json.servicos.forEach(s => {
+    html += `
+      <div class='servico'>
+        <h3>${s.titulo}</h3>
+        <p>${s.descricao}</p>
+        <strong>R$ ${s.valor}</strong>
+        <div class='carrossel'>
+          ${s.imagens.map(i => `<img src='${i}'>`).join("")}
+        </div>
+      </div>`;
+  });
+
+  document.getElementById("conteudo").innerHTML = html;
+}
+carregar();
 </script>
-
 </body>
 </html>
