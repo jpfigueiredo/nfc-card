@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Painel de Cartões</title>
+<style>
+body { font-family: Arial; background: #f7f7f7; padding: 20px; }
+.card { background:white; padding:20px; margin-bottom:10px; border-radius:10px; }
+button { padding:10px; margin-top:10px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h1>Cartões Cadastrados</h1>
+
+<div id="lista"></div>
+
+<button onclick="novoCartao()">+ Novo Cartão</button>
+
+<script>
+if (localStorage.getItem("auth") !== "ok") {
+  window.location.href = "index.html";
+}
+
+async function carregar() {
+  const r = await fetch("/data/cartoes.json");
+  const dados = await r.json();
+
+  const container = document.getElementById("lista");
+  container.innerHTML = "";
+
+  dados.cartoes.forEach(c => {
+    container.innerHTML += `
+      <div class="card">
+        <strong>${c.nome}</strong><br>
+        ID: ${c.id}<br>
+        <button onclick="editar('${c.id}')">Editar</button>
+      </div>
+    `;
+  });
+}
+
+function editar(id) {
+  window.location.href = `editor.html?id=${id}`;
+}
+
+function novoCartao() {
+  const nome = prompt("Nome do cartão?");
+  if (!nome) return;
+
+  const id = "cartao_" + Date.now();
+
+  fetch("/api/salvar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tipo: "novoCartao",
+      id,
+      nome
+    })
+  }).then(() => location.reload());
+}
+
+carregar();
+</script>
+
+</body>
+</html>
