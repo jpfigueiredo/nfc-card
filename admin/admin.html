@@ -1,37 +1,23 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Admin - Cartões Cadastrados</title>
-  <link rel="stylesheet" href="admin.css">
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="admin.css" />
+<title>Painel Admin</title>
 </head>
 <body>
-  <div class="admin-container">
-    <h1>Painel Administrativo</h1>
-    <p class="subtitle">Gerencie todos os cartões cadastrados</p>
+<div class="topo">
+  <h2>Painel Administrativo</h2>
+  <button onclick="logout()">Sair</button>
+</div>
 
-    <div class="table-container">
-      <table id="cartoesTabela">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Nome</th>
-            <th>Número</th>
-            <th>Validade</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Dados serão inseridos dinamicamente pelo JS -->
-        </tbody>
-      </table>
-    </div>
+<div class="conteudo">
+  <button class="novoBtn" onclick="novoCartao()">+ Criar novo cartão</button>
+  <table id="tabela"></table>
 
-    <button class="logout-btn" onclick="logout()">Sair</button>
-  </div>
+  <div id="editor"></div>
+</div>
 
-  <script src="admin.js"></script>
+<script src="admin.js"></script>
 </body>
 </html>
-
