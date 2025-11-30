@@ -1,0 +1,14 @@
+body{font-family:Inter,system-ui,Arial;background:#0f172a;color:#e6eef8;margin:0}
+.login-box{max-width:360px;margin:80px auto;padding:24px;background:#071233;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6);text-align:center}
+.login-box h2{margin-bottom:12px}
+.login-box input{width:100%;padding:12px;border-radius:8px;border:1px solid #213a5a;background:#071e3a;color:#fff;margin-top:8px}
+.login-box button{margin-top:12px;padding:12px 18px;border-radius:8px;background:#06b6d4;border:none;color:#06202a;cursor:pointer}
+.container-admin{max-width:1100px;margin:24px auto;padding:18px}
+.header-admin{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.card-item{background:#071a2a;padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.5)}
+.card-item h3{margin:0 0 6px 0}
+.btn{background:#06b6d4;border:none;color:#052026;padding:8px 10px;border-radius:8px;cursor:pointer}
+.small{padding:6px 8px;font-size:13px}
+.editor{margin-top:18px;background:#071a2a;padding:12px;border-radius:10px}
+.input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #12364f;background:#052a3e;color:#fff;margin-top:8px}

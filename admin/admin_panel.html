@@ -1,0 +1,319 @@
+    <!doctype html>
+    <html lang="pt-BR">
+    <head>
+    <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Painel Admin</title>
+    <link rel="stylesheet" href="admin_styles.css">
+    </head>
+    <body>
+    <div class="container-admin">
+      <div class="header-admin">
+        <h1>Painel de Cartões</h1>
+        <div>
+          <button class="btn small" id="btnNew">+ Novo cartão</button>
+          <button class="btn small" id="btnLogout">Sair</button>
+        </div>
+      </div>
+
+      <div id="cardsList" class="card-list"></div>
+
+      <div id="editorArea"></div>
+    </div>
+
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, getDocs, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+    import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
+    import { firebaseConfig } from '../firebase-config.js';
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    // Auth guard (simple)
+    if (localStorage.getItem('nfc_admin') !== 'ok') location.href = 'admin_login.html';
+
+    const cardsList = document.getElementById('cardsList');
+    const editorArea = document.getElementById('editorArea');
+    const btnNew = document.getElementById('btnNew');
+    const btnLogout = document.getElementById('btnLogout');
+
+    btnLogout.onclick = () => { localStorage.removeItem('nfc_admin'); location.href='admin_login.html' };
+
+    async function fetchAllCards(){
+      cardsList.innerHTML = 'Carregando...';
+      const snap = await getDocs(collection(db, 'cards'));
+      cardsList.innerHTML = '';
+      snap.forEach(docSnap => {
+        const id = docSnap.id;
+        const data = docSnap.data();
+        const div = document.createElement('div');
+        div.className = 'card-item';
+        div.innerHTML = `<h3>${data.contact?.name||'Sem nome'}</h3>
+                         <div class="text-xs">${id}</div>
+                         <div style="margin-top:10px"><button class="btn small" data-id="${id}" data-action="edit">Editar</button>
+                         <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:white">Excluir</button></div>`;
+        cardsList.appendChild(div);
+      });
+    }
+
+    cardsList.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      if(action === 'edit') openEditor(id);
+      if(action === 'delete') doDelete(id);
+    });
+
+    btnNew.onclick = async () => {
+      const id = prompt('ID do novo cartão (ex: cartao1)');
+      if(!id) return;
+      // create minimal card
+      await setDoc(doc(db,'cards', id), {
+        background: { url:'', opacity:0.25 },
+        logoUrl: '',
+        buttons: [],
+        contact: {},
+        services: [],
+        updated: new Date().toISOString()
+      });
+      fetchAllCards();
+    };
+
+    async function doDelete(id){
+      if(!confirm('Excluir '+id+'?')) return;
+      await deleteDoc(doc(db,'cards', id));
+      fetchAllCards();
+    }
+
+    async function openEditor(id){
+      editorArea.innerHTML = `<div class="editor">Carregando editor...</div>`;
+      const snap = await getDoc(doc(db,'cards', id));
+      if(!snap.exists()) {
+        alert('Cartão não existe'); return;
+      }
+      const data = snap.data();
+      renderEditor(id, data);
+    }
+
+    function renderEditor(id, data){
+      editorArea.innerHTML = `
+        <div class="editor">
+          <h3>Editando: ${id}</h3>
+
+          <label>Imagem de fundo</label>
+          <input type="file" id="bgFile" class="input" accept="image/*" />
+
+          <label>Opacidade (0 a 1)</label>
+          <input id="bgOpacity" class="input" value="${data.background?.opacity ?? 0.25}" />
+
+          <label>Logo (círculo)</label>
+          <input type="file" id="logoFile" class="input" accept="image/*" />
+
+          <h4>Contato</h4>
+          <input id="contactName" class="input" placeholder="Nome" value="${(data.contact?.name)||''}" />
+          <input id="contactCompany" class="input" placeholder="Empresa" value="${(data.contact?.company)||''}" />
+          <input id="contactPhone" class="input" placeholder="Telefone" value="${(data.contact?.phone)||''}" />
+          <input id="contactEmail" class="input" placeholder="Email" value="${(data.contact?.email)||''}" />
+          <input id="contactAddress" class="input" placeholder="Endereço" value="${(data.contact?.address)||''}" />
+          <textarea id="contactNotes" class="input" placeholder="Observações/links">${(data.contact?.notes)||''}</textarea>
+
+          <h4>Botoões</h4>
+          <div id="buttonsEditor"></div>
+          <button class="btn small" id="addButton">+ Adicionar botão</button>
+
+          <h4>Serviços</h4>
+          <div id="servicesEditor"></div>
+          <button class="btn small" id="addService">+ Adicionar serviço</button>
+
+          <div style="margin-top:12px">
+            <button class="btn" id="saveBtn">Salvar</button>
+            <button class="btn" id="openPublic">Abrir público</button>
+          </div>
+        </div>
+      `;
+
+      const buttonsEditor = document.getElementById('buttonsEditor');
+      const servicesEditor = document.getElementById('servicesEditor');
+
+      function refreshButtonsUI(){
+        buttonsEditor.innerHTML = '';
+        (data.buttons||[]).forEach((b, idx) => {
+          const div = document.createElement('div');
+          div.innerHTML = `
+            <input placeholder="Texto" class="input" data-idx="${idx}" data-type="text" value="${b.text||''}" />
+            <input placeholder="Link" class="input" data-idx="${idx}" data-type="link" value="${b.link||''}" />
+            <input type="file" data-idx="${idx}" data-type="icon" accept="image/*" class="input" />
+            <button class="btn small" data-idx="${idx}" data-action="delBtn">Remover botão</button>
+            <hr/>
+          `;
+          buttonsEditor.appendChild(div);
+        });
+      }
+
+      function refreshServicesUI(){
+        servicesEditor.innerHTML = '';
+        (data.services||[]).forEach((s, sidx) => {
+          const div = document.createElement('div');
+          div.innerHTML = `
+            <input placeholder="Título" class="input" data-sidx="${sidx}" data-type="title" value="${s.title||''}" />
+            <textarea placeholder="Descrição" class="input" data-sidx="${sidx}" data-type="desc">${s.description||''}</textarea>
+            <input placeholder="Valor" class="input" data-sidx="${sidx}" data-type="price" value="${s.price||''}" />
+            <input type="file" data-sidx="${sidx}" data-type="img" accept="image/*" class="input" />
+            <div id="thumbs-${sidx}" style="display:flex;gap:8px;margin-top:8px"></div>
+            <button class="btn small" data-sidx="${sidx}" data-action="delService" style="background:#ef4444">Remover serviço</button>
+            <hr/>
+          `;
+          servicesEditor.appendChild(div);
+          const thumbs = document.getElementById(`thumbs-${sidx}`);
+          (s.images||[]).forEach((u, ui)=> {
+            const img = document.createElement('img');
+            img.src = u; img.style.width='80px'; img.style.height='60px'; img.style.objectFit='cover'; img.style.borderRadius='8px';
+            thumbs.appendChild(img);
+          });
+        });
+      }
+
+      refreshButtonsUI(); refreshServicesUI();
+
+      document.getElementById('addButton').onclick = () => {
+        data.buttons = data.buttons || [];
+        data.buttons.push({ text:'Novo', link:'', iconUrl:'' });
+        refreshButtonsUI();
+      };
+
+      document.getElementById('addService').onclick = () => {
+        data.services = data.services || [];
+        data.services.push({ title:'Serviço', description:'', price:'', images:[] });
+        refreshServicesUI();
+      };
+
+      buttonsEditor.addEventListener('change', async (e) => {
+        const el = e.target;
+        const idx = el.dataset.idx;
+        if(!idx) return;
+        const type = el.dataset.type;
+        if(type === 'icon' && el.files[0]) {
+          const f = el.files[0];
+          const reader = new FileReader();
+          reader.onload = async () => {
+            const key = `cards/${id}/buttons/icon_${idx}_${Date.now()}.png`;
+            const ref = sRef(storage, key);
+            await uploadString(ref, reader.result, 'data_url');
+            const url = await getDownloadURL(ref);
+            data.buttons[idx].iconUrl = url;
+          };
+          reader.readAsDataURL(f);
+        }
+      });
+
+      servicesEditor.addEventListener('change', async (e) => {
+        const el = e.target;
+        const sidx = el.dataset.sidx;
+        if(!sidx) return;
+        const type = el.dataset.type;
+        if(type === 'img' && el.files[0]) {
+          const f = el.files[0];
+          const reader = new FileReader();
+          reader.onload = async () => {
+            const key = `cards/${id}/services/s${sidx}_img_${Date.now()}.png`;
+            const ref = sRef(storage, key);
+            await uploadString(ref, reader.result, 'data_url');
+            const url = await getDownloadURL(ref);
+            data.services[sidx].images = data.services[sidx].images || [];
+            data.services[sidx].images.push(url);
+            refreshServicesUI();
+          };
+n      reader.readAsDataURL(f);
+    }
+  });
+
+  buttonsEditor.addEventListener('click', (e)=> {
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    if(btn.dataset.action === 'delBtn') {
+      data.buttons.splice(Number(btn.dataset.idx),1);
+      refreshButtonsUI();
+    }
+  });
+
+  servicesEditor.addEventListener('click', (e)=> {
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    if(btn.dataset.action === 'delService') {
+      data.services.splice(Number(btn.dataset.sidx),1);
+      refreshServicesUI();
+    }
+  });
+
+  document.getElementById('bgFile').addEventListener('change', async (e)=> {
+    const f = e.target.files[0]; if(!f) return;
+    const rdr = new FileReader();
+    rdr.onload = async () => {
+      const key = `cards/${id}/background_${Date.now()}.png`;
+      const ref = sRef(storage, key);
+      await uploadString(ref, rdr.result, 'data_url');
+      const url = await getDownloadURL(ref);
+      data.background = data.background || {};
+      data.background.url = url;
+    };
+    rdr.readAsDataURL(f);
+  });
+
+  document.getElementById('logoFile').addEventListener('change', async (e)=> {
+    const f = e.target.files[0]; if(!f) return;
+    const rdr = new FileReader();
+    rdr.onload = async () => {
+      const key = `cards/${id}/logo_${Date.now()}.png`;
+      const ref = sRef(storage, key);
+      await uploadString(ref, rdr.result, 'data_url');
+      const url = await getDownloadURL(ref);
+      data.logoUrl = url;
+    };
+    rdr.readAsDataURL(f);
+  });
+
+  document.getElementById('saveBtn').onclick = async () => {
+    data.background = data.background || {};
+    data.background.opacity = Number(document.getElementById('bgOpacity').value) || 0.25;
+    data.contact = {
+      name: document.getElementById('contactName').value,
+      company: document.getElementById('contactCompany').value,
+      phone: document.getElementById('contactPhone').value,
+      email: document.getElementById('contactEmail').value,
+      address: document.getElementById('contactAddress').value,
+      notes: document.getElementById('contactNotes').value
+    };
+    document.querySelectorAll('#buttonsEditor input[data-type="text"]').forEach(inp => {
+      const idx = inp.dataset.idx; data.buttons[idx].text = inp.value;
+    });
+    document.querySelectorAll('#buttonsEditor input[data-type="link"]').forEach(inp => {
+      const idx = inp.dataset.idx; data.buttons[idx].link = inp.value;
+    });
+    document.querySelectorAll('#servicesEditor input[data-type="title"]').forEach(inp => {
+      const sidx = inp.dataset.sidx; data.services[sidx].title = inp.value;
+    });
+    document.querySelectorAll('#servicesEditor textarea[data-type="desc"]').forEach(inp => {
+      const sidx = inp.dataset.sidx; data.services[sidx].description = inp.value;
+    });
+    document.querySelectorAll('#servicesEditor input[data-type="price"]').forEach(inp => {
+      const sidx = inp.dataset.sidx; data.services[sidx].price = inp.value;
+    });
+
+    data.updated = new Date().toISOString();
+    await setDoc(doc(db,'cards', id), data, { merge:true });
+    alert('Salvo com sucesso!');
+    fetchAllCards();
+  };
+
+  document.getElementById('openPublic').onclick = ()=> {
+    window.open(`${location.origin}/?id=${encodeURIComponent(id)}&public=1`, '_blank');
+  };
+}
+
+fetchAllCards();
+
+</script>
+</body>
+</html>

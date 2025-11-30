@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cartão Virtual</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+<style>
+  body { background:#f3f4f6; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+  .card { max-width:480px; margin:40px auto; border-radius:16px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,0.08); }
+  .bg-layer { height:260px; background-size:cover; background-position:center; position:relative; }
+  .logo { width:120px;height:120px;border-radius:9999px;border:6px solid white; overflow:hidden; margin:-60px auto 0; background:#fff; }
+  .btn-link { display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; background:rgba(255,255,255,0.9); text-decoration:none; color:#111; }
+  .service-img { width:100%; height:150px; object-fit:cover; border-radius:10px; }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+import { firebaseConfig } from './firebase-config.js';
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+async function loadCardData(id) {
+  const docRef = doc(db, 'cards', id);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) throw new Error('Cartão não encontrado');
+  const data = snap.data();
+  return data;
+}
+
+function buildPublicHTML(data, id) {
+  const bgUrl = data.background?.url || '';
+  const bgOpacity = data.background?.opacity ?? 0.25;
+  const logoUrl = data.logoUrl || '';
+  let html = `<div class="card bg-white">`;
+  html += `<div class="bg-layer" style="background-image:url('${bgUrl}'); opacity:${bgOpacity};"></div>`;
+  html += `<div style="padding:18px; background:white;">`;
+  html += `<div class="logo"><img src="${logoUrl}" style="width:100%;height:100%;object-fit:cover;"></div>`;
+  html += `<div style="padding-top:12px">`;
+  if (data.buttons && data.buttons.length) {
+    data.buttons.forEach(b => {
+      html += `<a class="btn-link mt-3" href="${b.link || '#'}" target="_blank">
+                ${b.iconUrl ? `<img src="${b.iconUrl}" style="width:28px;height:28px;border-radius:6px">` : ''}
+                <span>${b.text || 'Abrir'}</span>
+               </a>`;
+    });
+  }
+  html += `<div class="mt-4 text-sm text-gray-700">`;
+  if (data.contact) {
+    html += `<div class="font-semibold">${data.contact.name||''}</div>`;
+    html += `<div class="text-xs text-gray-500">${data.contact.company||''}</div>`;
+    html += `<div class="mt-2"><strong>Tel:</strong> ${data.contact.phone||'-'}</div>`;
+    html += `<div><strong>Email:</strong> ${data.contact.email||'-'}</div>`;
+    html += `<div><strong>End:</strong> ${data.contact.address||'-'}</div>`;
+  }
+  html += `</div>`;
+  if (data.services && data.services.length) {
+    html += `<div class="mt-4">`;
+    data.services.forEach(s => {
+      html += `<div style="background:#f8fafc;padding:12px;border-radius:12px;margin-top:12px;">
+        <div class="font-semibold">${s.title}</div>
+        <div class="text-xs text-gray-600 my-2">${s.description}</div>`;
+      if (s.images && s.images.length) {
+        html += `<div>`;
+        s.images.forEach(img => html += `<img class="service-img" src="${img}">`);
+        html += `</div>`;
+      }
+      html += `<div class="mt-2 font-medium">Valor: R$ ${s.price || '--'}</div>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+  html += `</div></div></div>`;
+  return html;
+}
+
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id') || 'cartao1';
+  try {
+    const data = await loadCardData(id);
+    document.getElementById('root').innerHTML = buildPublicHTML(data, id);
+  } catch (err) {
+    document.getElementById('root').innerHTML = `<div style="max-width:420px;margin:40px auto;padding:20px;background:white;border-radius:12px;">${err.message}</div>`;
+  }
+})();
+</script>
+
+</body>
+</html>
